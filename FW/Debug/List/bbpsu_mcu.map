@@ -1,0 +1,70 @@
+RAM Allocation [bytes]
+Variable                                                                          Address   Size
+------------------------------------------------------------------------------------------------
+twi_tx_index                                                                      0x0319       1
+twi_rx_index                                                                      0x031A       1
+twi_result                                                                        0x031B       1
+_output                                                                           0x031C       5
+buffer_lcd                                                                        0x0321      20
+pre_corriente                                                                     0x0335       4
+pre_voltaje                                                                       0x0339       4
+corriente                                                                         0x033D       4
+voltaje                                                                           0x0341       4
+adc_data                                                                          0x0345       8
+input_index                                                                       0x034D       1
+slave_address                                                                     0x034E       1
+twi_tx_buffer                                                                     0x034F       2
+bytes_to_tx                                                                       0x0351       1
+twi_rx_buffer                                                                     0x0352       2
+bytes_to_rx                                                                       0x0354       1
+twi_rx_buffer_size                                                                0x0355       1
+twi_slave_rx_handler                                                              0x0356       2
+twi_slave_tx_handler                                                              0x0358       2
+_seed                                                                             0x035A       4
+
+EEPROM Allocation [bytes]
+Variable                                                                          Address   Size
+------------------------------------------------------------------------------------------------
+
+Register Allocation
+Variable                                                                          Register  Size
+------------------------------------------------------------------------------------------------
+_entryState                                                                       R4           1
+_displayState                                                                     R3           1
+i                                                                                 R5,R6        2
+twi_flag                                                                          GPIOR0.0  1bit
+twi_ready                                                                         GPIOR0.1  1bit
+
+FLASH Allocation [words]
+Function                                                                          Address   Size
+------------------------------------------------------------------------------------------------
+GetLowData                                                                        0x000AD      6
+GetHighData                                                                       0x000B3      8
+LCD_I2C_begin                                                                     0x000BB     14
+LCD_I2C_backlight                                                                 0x000C9     11
+LCD_I2C_clear                                                                     0x000D4     10
+LCD_I2C_leftToRight                                                               0x000DE      7
+LCD_I2C_display                                                                   0x000E5     11
+LCD_I2C_setCursor                                                                 0x000F0     23
+LCD_I2C_write                                                                     0x00107     16
+LCD_I2C_InitializeLCD                                                             0x00117     38
+LCD_I2C_I2C_Write                                                                 0x0013D     18
+LCD_I2C_LCD_Write                                                                 0x0014F     27
+LCD_I2C_puts                                                                      0x0016A     15
+adc_isr                                                                           0x00179     53
+main                                                                              0x001AE    225
+adc2Vbat                                                                          0x0029E     17
+zxct1107                                                                          0x002AF     10
+put_buff_G100                                                                     0x002B9     58
+_ftoe_G100                                                                        0x002F3    210
+_print_G100                                                                       0x003C5    538
+sprintf                                                                           0x005DF     52
+twi_master_init                                                                   0x00613     46
+twi_master_trans                                                                  0x00641    105
+twi_int_handler                                                                   0x006AA    380
+strcpyf                                                                           0x00826     13
+strlen                                                                            0x00833     12
+strlenf                                                                           0x0083F     13
+ftrunc                                                                            0x0084C     49
+floor                                                                             0x0087D     21
+ftoa                                                                              0x00892    161
