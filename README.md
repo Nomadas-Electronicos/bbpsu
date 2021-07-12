@@ -11,7 +11,7 @@ El funcionamiento esta basado en un convertidor DC/DC de topología SEPIC. El mo
 
 El esquemático esta hecho en [Diptrace](www.diptrace.com) y el firmware en CodeVision.
 
-Existen 2 versiones: La primera (bbpsu_mcu) tiene errores comentados en el respectivo post en [Nómadas Electrónicos](nomadaselectronicos.wordpress.com). La segunda (bbpsu_mcu_v2) trata de corregir los errores mencionados, ademas de ser mas el punto de partida para ir mejorando el circuito y el firmware.
+Existen 2 versiones principales: La primera (bbpsu_mcu) tiene errores comentados en el respectivo post en [Nómadas Electrónicos](nomadaselectronicos.wordpress.com). La segunda (bbpsu_mcu_v2) trata de corregir los errores mencionados, ademas de ser mas el punto de partida para ir mejorando el circuito y el firmware. Tambien hay una version "sencilla" (bbpsu) que no requiere microprocesador o programacion alguna, todo se configura con las resistencias variables del circuito.
 
 Aunque el programa del microcontrolador esta hecho en CodeVision, no se descarta que en un futuro, se cambie a un compilador algo mas popular y/o accesible para toda persona que este interesada en el desarrollo del circuito.
 
