@@ -6,8 +6,8 @@ Automatic Program Generator
 http://www.hpinfotech.com
 
 Project : BBPSU_MCU
-Version : 1.0a
-Date    : 27/06/2021
+Version : 1.2
+Date    : 02/08/2021
 Author  : Argos
 Company : Nómadas Electrónicos
 Comments: 
@@ -33,53 +33,90 @@ Data Stack size         : 512
 
 // Declare your global variables here
 
+//Salidas de LED
 #define LED_VERDE PORTB.7
 #define LED_ROJO  PORTB.6
+//(des)Habilitador del regulador SEPIC
+#define SEPIC_EN  PORTD.5  
+//Botones
+#define B_1       PIND.2
+#define B_2       PIND.3
 
-#define NUM_DESPLIEGUES 50
+uint8_t boton_display, boton2;
 
 uint8_t buffer_lcd[20];
-int i;
-float pre_corriente, pre_voltaje, corriente, voltaje; 
 
 
-#define FIRST_ADC_INPUT 0
-#define LAST_ADC_INPUT 3
-unsigned int adc_data[LAST_ADC_INPUT-FIRST_ADC_INPUT+1];
+float g_pre_cent, g_pre_csal, g_pre_vbat, g_pre_vsal, g_pre_vent;
+float g_cent, g_csal, g_vbat, g_vsal, g_vent, g_pent, g_psal, g_eff;
+
+unsigned char desplegar_estado;
+
+
+// External Interrupt 0 service routine
+interrupt [EXT_INT0] void ext_int0_isr(void)
+{  
+ delay_ms(50); //debounce
+ while(B_1 == 0);
+ delay_ms(50);
+   
+ boton_display = 1;
+      
+ //desplegar = (++desplegar)%6;
+ //delay_ms(50);
+}
+
+// External Interrupt 1 service routine
+interrupt [EXT_INT1] void ext_int1_isr(void)
+{
+
+ delay_ms(50); //debounce
+ while(B_2 == 0);
+ delay_ms(50);  
+ 
+ boton_on_off = 1;
+ 
+ //SEPIC_EN = !(SEPIC_EN);
+ //LED_ROJO =  SEPIC_EN;
+ //delay_ms(50);
+}
+
+//Canales del ADC
+#define ADC_CENT  0
+#define ADC_CSAL  1
+#define ADC_VBAT  2
+#define ADC_VSAL  3
+#define ADC_VENT  6
+
+
+
 // Voltage Reference: AVCC pin
 #define ADC_VREF_TYPE ((0<<REFS1) | (1<<REFS0) | (0<<ADLAR))
 
-// ADC interrupt service routine
-// with auto input scanning
-interrupt [ADC_INT] void adc_isr(void)
-{
-static unsigned char input_index=0;
-
 // Read the AD conversion result
-adc_data[input_index]=ADCW;
-// Select next ADC input
-if (++input_index > (LAST_ADC_INPUT-FIRST_ADC_INPUT))
-   input_index=0;
-ADMUX=(FIRST_ADC_INPUT | ADC_VREF_TYPE)+input_index;
+unsigned int read_adc(unsigned char adc_input)
+{
+ADMUX=adc_input | ADC_VREF_TYPE;
 // Delay needed for the stabilization of the ADC input voltage
 delay_us(10);
 // Start the AD conversion
 ADCSRA|=(1<<ADSC);
+// Wait for the AD conversion to complete
+while ((ADCSRA & (1<<ADIF))==0);
+ADCSRA|=(1<<ADIF);
+return ADCW;
 }
 
 // TWI functions
 #include <twi.h>
 
 
-float adc2Vout(float adc);
-float adc2Vbat(float adc);
-float zxct1107(float adc);
+void hw_init(void);
 
 
 void main(void)
 {
 // Declare your local variables here
-
 
 // Crystal Oscillator division factor: 1
 #pragma optsize-
@@ -89,36 +126,144 @@ CLKPR=(0<<CLKPCE) | (0<<CLKPS3) | (0<<CLKPS2) | (0<<CLKPS1) | (0<<CLKPS0);
 #pragma optsize+
 #endif
 
-// Reset Source checking
+// Checa Fuente de Reset
 if (MCUSR & (1<<PORF))
    {
-   // Power-on Reset
+   // Power-on 
    MCUSR=0;
    // Place your code here
 
    }
 else if (MCUSR & (1<<EXTRF))
    {
-   // External Reset
+   // Reset Externo
    MCUSR=0;
    // Place your code here
 
    }
 else if (MCUSR & (1<<BORF))
    {
-   // Brown-Out Reset
+   // Brown-Out
    MCUSR=0;
    // Place your code here
 
    }
 else
    {
-   // Watchdog Reset
+   // Watchdog 
    MCUSR=0;
    // Place your code here
 
    }
 
+hw_init();
+      
+LED_ROJO =  SEPIC_EN;
+LCD_I2C_begin(0);
+LCD_I2C_backlight();
+LCD_I2C_setCursor(0, 0);
+LCD_I2C_puts("Nomadas");
+LCD_I2C_setCursor(0, 1);
+LCD_I2C_puts("    Electronicos");
+delay_ms(1500);
+
+while(1)
+{
+    //Etapa en la que pasan las variables de adc   
+    LED_VERDE = 1;
+    // #asm("cli")
+    g_pre_cent = read_adc(ADC_CENT);
+    g_pre_csal = read_adc(ADC_CSAL);
+    g_pre_vbat = read_adc(ADC_VBAT);
+    g_pre_vsal = read_adc(ADC_VSAL);
+    g_pre_vent = read_adc(ADC_VENT);
+    // #asm("sei")
+    LED_VERDE = 0; 
+    
+    
+    //Se hacen todos los calculos
+        
+    g_cent = 0.0048875855 * g_pre_cent; // zxct1107 en [A] (5/1023)
+    g_csal = 0.0048875855 * g_pre_csal;
+                                       
+                                     // (1+(Ra/Rb))*(5/1023)
+    g_vent = 0.0278592 * g_pre_vent; // Ra = 470k, Rb = 100k
+    g_vbat = 0.0146628 * g_pre_vbat; // Ra = 200k, Rb = 100k
+    g_vsal = 0.0146628 * g_pre_vsal; // Ra = 200k, Rb = 100k
+    
+    g_pent = g_cent * g_vent;        //Potencia de entrada
+    g_psal = g_csal * g_vsal;        //Potencia de salida
+    
+    g_eff = 100.0 * g_psal/g_pent;   //Eficiencia
+    
+    //Se muestran los resultados
+    
+    switch(desplegar_estado)
+    {
+        case 0:
+                sprintf(buffer_lcd, "Ient:%6.1f[mA]    ", g_cent*1000.0);
+                LCD_I2C_setCursor(0, 0);
+                LCD_I2C_puts(buffer_lcd); 
+                sprintf(buffer_lcd, "Vent: %5.2f[V]    ", g_vent);                    
+                LCD_I2C_setCursor(0, 1);
+                LCD_I2C_puts(buffer_lcd);
+                break;
+        case 1: 
+                sprintf(buffer_lcd, "Isal:%6.1f[mA]    ", g_csal*1000.0);
+                LCD_I2C_setCursor(0, 0);
+                LCD_I2C_puts(buffer_lcd); 
+                sprintf(buffer_lcd, "Vsal: %5.2f[V]    ", g_vsal);                    
+                LCD_I2C_setCursor(0, 1);
+                LCD_I2C_puts(buffer_lcd);  
+                break;      
+        case 2:    
+                sprintf(buffer_lcd, "Pent:%6.1f[W]    ", g_pent);
+                LCD_I2C_setCursor(0, 0);
+                LCD_I2C_puts(buffer_lcd); 
+                sprintf(buffer_lcd, "Psal:%6.1f[W]    ", g_psal);                    
+                LCD_I2C_setCursor(0, 1);
+                LCD_I2C_puts(buffer_lcd);
+                break;
+        case 3:    
+                sprintf(buffer_lcd, "Eff: %6.1f[%%]    ", g_eff);
+                LCD_I2C_setCursor(0, 0);
+                LCD_I2C_puts(buffer_lcd); 
+                sprintf(buffer_lcd, "Vbat: %5.2f[V]    ", g_vbat);                    
+                LCD_I2C_setCursor(0, 1);
+                LCD_I2C_puts(buffer_lcd);
+                break; 
+        case 4:    
+                sprintf(buffer_lcd, "%04d %04d %04d ", (int)g_pre_cent, (int)g_pre_csal, (int)g_pre_vbat);
+                LCD_I2C_setCursor(0, 0);
+                LCD_I2C_puts(buffer_lcd); 
+                sprintf(buffer_lcd, "%04d %04d         ", (int)g_pre_vent, (int)g_pre_vsal);                    
+                LCD_I2C_setCursor(0, 1);
+                LCD_I2C_puts(buffer_lcd);
+                break;
+        
+    }
+      
+    if(boton_display)
+    {
+      desplegar_estado = (++desplegar_estado)%5 ;
+      boton_display = 0;
+    }
+    if(boton_on_off)
+    {
+      SEPIC_EN = !(SEPIC_EN);
+      LED_ROJO =  SEPIC_EN; 
+      boton_on_off = 0;
+    }
+    //delay_ms(100);
+
+
+}
+
+
+}
+
+void hw_init(void)
+{
 // Input/Output Ports initialization
 // Port B initialization
 // Function: Bit7=Out Bit6=Out Bit5=In Bit4=In Bit3=In Bit2=In Bit1=In Bit0=In 
@@ -133,10 +278,10 @@ DDRC=(0<<DDC6) | (0<<DDC5) | (0<<DDC4) | (0<<DDC3) | (0<<DDC2) | (0<<DDC1) | (0<
 PORTC=(0<<PORTC6) | (0<<PORTC5) | (0<<PORTC4) | (0<<PORTC3) | (0<<PORTC2) | (0<<PORTC1) | (0<<PORTC0);
 
 // Port D initialization
-// Function: Bit7=In Bit6=In Bit5=In Bit4=In Bit3=In Bit2=In Bit1=In Bit0=In 
-DDRD=(0<<DDD7) | (0<<DDD6) | (0<<DDD5) | (0<<DDD4) | (0<<DDD3) | (0<<DDD2) | (0<<DDD1) | (0<<DDD0);
-// State: Bit7=T Bit6=T Bit5=T Bit4=T Bit3=T Bit2=T Bit1=T Bit0=T 
-PORTD=(0<<PORTD7) | (0<<PORTD6) | (0<<PORTD5) | (0<<PORTD4) | (0<<PORTD3) | (0<<PORTD2) | (0<<PORTD1) | (0<<PORTD0);
+// Function: Bit7=In Bit6=In Bit5=Out Bit4=In Bit3=In Bit2=In Bit1=In Bit0=In 
+DDRD=(0<<DDD7) | (0<<DDD6) | (1<<DDD5) | (0<<DDD4) | (0<<DDD3) | (0<<DDD2) | (0<<DDD1) | (0<<DDD0);
+// State: Bit7=T Bit6=T Bit5=1 Bit4=T Bit3=T Bit2=T Bit1=T Bit0=T 
+PORTD=(0<<PORTD7) | (0<<PORTD6) | (1<<PORTD5) | (0<<PORTD4) | (0<<PORTD3) | (0<<PORTD2) | (0<<PORTD1) | (0<<PORTD0);
 
 // Timer/Counter 0 initialization
 // Clock source: System Clock
@@ -196,13 +341,16 @@ TIMSK1=(0<<ICIE1) | (0<<OCIE1B) | (0<<OCIE1A) | (0<<TOIE1);
 TIMSK2=(0<<OCIE2B) | (0<<OCIE2A) | (0<<TOIE2);
 
 // External Interrupt(s) initialization
-// INT0: Off
-// INT1: Off
+// INT0: On
+// INT0 Mode: Falling Edge
+// INT1: On
+// INT1 Mode: Falling Edge
 // Interrupt on any change on pins PCINT0-7: Off
 // Interrupt on any change on pins PCINT8-14: Off
 // Interrupt on any change on pins PCINT16-23: Off
-EICRA=(0<<ISC11) | (0<<ISC10) | (0<<ISC01) | (0<<ISC00);
-EIMSK=(0<<INT1) | (0<<INT0);
+EICRA=(1<<ISC11) | (0<<ISC10) | (1<<ISC01) | (0<<ISC00);
+EIMSK=(1<<INT1) | (1<<INT0);
+EIFR=(1<<INTF1) | (1<<INTF0);
 PCICR=(0<<PCIE2) | (0<<PCIE1) | (0<<PCIE0);
 
 // USART initialization
@@ -221,14 +369,14 @@ ACSR=(1<<ACD) | (0<<ACBG) | (0<<ACO) | (0<<ACI) | (0<<ACIE) | (0<<ACIC) | (0<<AC
 DIDR1=(0<<AIN0D) | (0<<AIN1D);
 
 // ADC initialization
-// ADC Clock frequency: 1000.000 kHz
+// ADC Clock frequency: 125.000 kHz
 // ADC Voltage Reference: AREF pin
-// ADC Auto Trigger Source: Free Running
-// Digital input buffers on ADC0: On, ADC1: On, ADC2: On, ADC3: On
+// ADC Auto Trigger Source: ADC Stopped
+// Digital input buffers on ADC0: Off, ADC1: Off, ADC2: Off, ADC3: Off
 // ADC4: On, ADC5: On
-DIDR0=(0<<ADC5D) | (0<<ADC4D) | (0<<ADC3D) | (0<<ADC2D) | (0<<ADC1D) | (0<<ADC0D);
-ADMUX=FIRST_ADC_INPUT | ADC_VREF_TYPE;
-ADCSRA=(1<<ADEN) | (1<<ADSC) | (1<<ADATE) | (0<<ADIF) | (1<<ADIE) | (0<<ADPS2) | (1<<ADPS1) | (1<<ADPS0);
+DIDR0=(0<<ADC5D) | (0<<ADC4D) | (1<<ADC3D) | (1<<ADC2D) | (1<<ADC1D) | (1<<ADC0D);
+ADMUX=ADC_VREF_TYPE;
+ADCSRA=(1<<ADEN) | (0<<ADSC) | (0<<ADATE) | (0<<ADIF) | (0<<ADIE) | (1<<ADPS2) | (1<<ADPS1) | (0<<ADPS0);
 ADCSRB=(0<<ADTS2) | (0<<ADTS1) | (0<<ADTS0);
 
 // SPI initialization
@@ -242,93 +390,7 @@ twi_master_init(100);
 
 // Global enable interrupts
 #asm("sei")
-ADCSRA|=(1<<ADSC);
-
-LCD_I2C_begin(0);
-LCD_I2C_backlight();
-LCD_I2C_setCursor(0, 0);
-LCD_I2C_puts("Nomadas");
-LCD_I2C_setCursor(0, 1);
-LCD_I2C_puts("    Electronicos");
-delay_ms(1500);
-
-while (1)
-      {
-      // Place your code here 
-                  
-          //Muestra los valores de Corriente de Entrada y voltaje de Bateria
-          for(i=0; i<NUM_DESPLIEGUES; i++)
-          { 
-           LED_ROJO =1;
-           // Asegura que a media lectura no entre en interrupcion 
-           #asm("cli")
-           pre_corriente = (float)adc_data[0];
-           pre_voltaje   = (float)adc_data[2];
-           #asm("sei") 
-           
-           //Adapta
-           corriente =  (1000.0*zxct1107(pre_corriente));
-           voltaje   =  adc2Vbat(pre_voltaje); 
-                               
-           //Despliega
-           sprintf(buffer_lcd, "Ient:%6.1f[mA]    ", corriente);
-           LCD_I2C_setCursor(0, 0);
-           LCD_I2C_puts(buffer_lcd); 
-           //sprintf(buffer_lcd, "Vbat: %5.2f[V]    ", voltaje);
-           sprintf(buffer_lcd, "Vbat: %6.1f[V]    ", pre_voltaje);
-           LCD_I2C_setCursor(0, 1);
-           LCD_I2C_puts(buffer_lcd); 
-           
-           LED_ROJO=0;
-           delay_ms(50); 
-          }
-          
-          
-          //Muestra los valores de Voltaje y Corriente de Salida
-          for(i=0; i<NUM_DESPLIEGUES; i++)
-          {
-           LED_ROJO =1;        
-           // Asegura que a media lectura no entre en interrupcion 
-           #asm("cli")
-           pre_corriente = (float)adc_data[1];
-           pre_voltaje   = (float)adc_data[3];
-           #asm("sei")
-           
-           //Adapta
-           corriente =  (1000.0*zxct1107(pre_corriente));
-           voltaje   =  adc2Vout(pre_voltaje);
-                  
-           //Despliega 
-           sprintf(buffer_lcd, "Isal:%6.1f[mA]    ", corriente);
-           LCD_I2C_setCursor(0, 0);
-           LCD_I2C_puts(buffer_lcd); 
-           sprintf(buffer_lcd, "Vsal: %5.2f[V]    ", voltaje);
-           //sprintf(buffer_lcd, "Vsal: %6.1f[V]    ", pre_voltaje);
-           LCD_I2C_setCursor(0, 1);
-           LCD_I2C_puts(buffer_lcd);
-             
-           LED_ROJO=0;
-           delay_ms(50);
-          }    
-          
-      }
 }
 
 
-float adc2Vout(float adc)
-{
- // por regresion lineal                
- return 0.014812 * adc + 0.012666;
- //return  adc * 0.0048875855;
-}
 
-float adc2Vbat(float adc)
-{
- return 0.04578*((float)adc)-0.97967;
-}
-
-float zxct1107(float adc)
-{
-          //   5.0/1024.0                          
- return  adc * 0.0048875855; 
-}

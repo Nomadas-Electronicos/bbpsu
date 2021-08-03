@@ -6,8 +6,8 @@
 ;http://www.hpinfotech.com
 ;
 ;Project : BBPSU_MCU
-;Version : 1.0a
-;Date    : 27/06/2021
+;Version : 1.2
+;Date    : 02/08/2021
 ;Author  : Argos
 ;Company : Nómadas Electrónicos
 ;Comments:
@@ -632,555 +632,469 @@
 ;
 ;// Declare your global variables here
 ;
+;//Salidas de LED
 ;#define LED_VERDE PORTB.7
 ;#define LED_ROJO  PORTB.6
+;//(des)Habilitador del regulador SEPIC
+;#define SEPIC_EN  PORTD.5
+;//Botones
+;#define B_1       PIND.2
+;#define B_2       PIND.3
 ;
-;#define NUM_DESPLIEGUES 50
+;uint8_t boton_display, boton_on_off;
 ;
 ;uint8_t buffer_lcd[20];
-;int i;
-;float pre_corriente, pre_voltaje, corriente, voltaje;
 ;
 ;
-;#define FIRST_ADC_INPUT 0
-;#define LAST_ADC_INPUT 3
-;unsigned int adc_data[LAST_ADC_INPUT-FIRST_ADC_INPUT+1];
-;// Voltage Reference: AVCC pin
-;#define ADC_VREF_TYPE ((0<<REFS1) | (1<<REFS0) | (0<<ADLAR))
+;float g_pre_cent, g_pre_csal, g_pre_vbat, g_pre_vsal, g_pre_vent;
+;float g_cent, g_csal, g_vbat, g_vsal, g_vent, g_pent, g_psal, g_eff;
 ;
-;// ADC interrupt service routine
-;// with auto input scanning
-;interrupt [ADC_INT] void adc_isr(void)
-; 0000 0037 {
+;unsigned char desplegar_estado;
+;
+;
+;// External Interrupt 0 service routine
+;interrupt [EXT_INT0] void ext_int0_isr(void)
+; 0000 003A {
 ;PCODE: $0000023A VOL: 0
 ;PCODE: $0000023B VOL: 0
-; 0000 0038 static unsigned char input_index=0;
-; 0000 0039 
-; 0000 003A // Read the AD conversion result
-; 0000 003B adc_data[input_index]=ADCW;
+; 0000 003B  delay_ms(50); //debounce
 ;PCODE: $0000023C VOL: 0
 ;PCODE: $0000023D VOL: 0
 ;PCODE: $0000023E VOL: 0
+; 0000 003C  while(B_1 == 0);
 ;PCODE: $0000023F VOL: 0
 ;PCODE: $00000240 VOL: 0
 ;PCODE: $00000241 VOL: 0
 ;PCODE: $00000242 VOL: 0
-; 0000 003C // Select next ADC input
-; 0000 003D if (++input_index > (LAST_ADC_INPUT-FIRST_ADC_INPUT))
 ;PCODE: $00000243 VOL: 0
 ;PCODE: $00000244 VOL: 0
+; 0000 003D  delay_ms(50);
 ;PCODE: $00000245 VOL: 0
 ;PCODE: $00000246 VOL: 0
 ;PCODE: $00000247 VOL: 0
-; 0000 003E    input_index=0;
+; 0000 003E 
+; 0000 003F  boton_display = 1;
 ;PCODE: $00000248 VOL: 0
 ;PCODE: $00000249 VOL: 0
-; 0000 003F ADMUX=(FIRST_ADC_INPUT | ADC_VREF_TYPE)+input_index;
+; 0000 0040 
+; 0000 0041  //desplegar = (++desplegar)%6;
+; 0000 0042  //delay_ms(50);
+; 0000 0043 }
 ;PCODE: $0000024A VOL: 0
 ;PCODE: $0000024B VOL: 0
 ;PCODE: $0000024C VOL: 0
+;
+;// External Interrupt 1 service routine
+;interrupt [EXT_INT1] void ext_int1_isr(void)
+; 0000 0047 {
 ;PCODE: $0000024D VOL: 0
-; 0000 0040 // Delay needed for the stabilization of the ADC input voltage
-; 0000 0041 delay_us(10);
 ;PCODE: $0000024E VOL: 0
-; 0000 0042 // Start the AD conversion
-; 0000 0043 ADCSRA|=(1<<ADSC);
+; 0000 0048 
+; 0000 0049  delay_ms(50); //debounce
 ;PCODE: $0000024F VOL: 0
 ;PCODE: $00000250 VOL: 0
 ;PCODE: $00000251 VOL: 0
-; 0000 0044 }
+; 0000 004A  while(B_2 == 0);
 ;PCODE: $00000252 VOL: 0
 ;PCODE: $00000253 VOL: 0
 ;PCODE: $00000254 VOL: 0
+;PCODE: $00000255 VOL: 0
+;PCODE: $00000256 VOL: 0
+;PCODE: $00000257 VOL: 0
+; 0000 004B  delay_ms(50);
+;PCODE: $00000258 VOL: 0
+;PCODE: $00000259 VOL: 0
+;PCODE: $0000025A VOL: 0
+; 0000 004C 
+; 0000 004D  boton_on_off = 1;
+;PCODE: $0000025B VOL: 0
+;PCODE: $0000025C VOL: 0
+; 0000 004E 
+; 0000 004F  //SEPIC_EN = !(SEPIC_EN);
+; 0000 0050  //LED_ROJO =  SEPIC_EN;
+; 0000 0051  //delay_ms(50);
+; 0000 0052 }
+;PCODE: $0000025D VOL: 0
+;PCODE: $0000025E VOL: 0
+;PCODE: $0000025F VOL: 0
+;
+;//Canales del ADC
+;#define ADC_CENT  0
+;#define ADC_CSAL  1
+;#define ADC_VBAT  2
+;#define ADC_VSAL  3
+;#define ADC_VENT  6
+;
+;
+;
+;// Voltage Reference: AVCC pin
+;#define ADC_VREF_TYPE ((0<<REFS1) | (1<<REFS0) | (0<<ADLAR))
+;
+;// Read the AD conversion result
+;unsigned int read_adc(unsigned char adc_input)
+; 0000 0062 {
+;PCODE: $00000260 VOL: 0
+;PCODE: $00000261 VOL: 0
+; 0000 0063 ADMUX=adc_input | ADC_VREF_TYPE;
+;PCODE: $00000262 VOL: 0
+;	adc_input -> Y+0
+;PCODE: $00000263 VOL: 0
+;PCODE: $00000264 VOL: 0
+;PCODE: $00000265 VOL: 0
+; 0000 0064 // Delay needed for the stabilization of the ADC input voltage
+; 0000 0065 delay_us(10);
+;PCODE: $00000266 VOL: 0
+; 0000 0066 // Start the AD conversion
+; 0000 0067 ADCSRA|=(1<<ADSC);
+;PCODE: $00000267 VOL: 0
+;PCODE: $00000268 VOL: 0
+;PCODE: $00000269 VOL: 0
+; 0000 0068 // Wait for the AD conversion to complete
+; 0000 0069 while ((ADCSRA & (1<<ADIF))==0);
+;PCODE: $0000026A VOL: 0
+;PCODE: $0000026B VOL: 0
+;PCODE: $0000026C VOL: 0
+;PCODE: $0000026D VOL: 0
+;PCODE: $0000026E VOL: 0
+;PCODE: $0000026F VOL: 0
+; 0000 006A ADCSRA|=(1<<ADIF);
+;PCODE: $00000270 VOL: 0
+;PCODE: $00000271 VOL: 0
+;PCODE: $00000272 VOL: 0
+; 0000 006B return ADCW;
+;PCODE: $00000273 VOL: 0
+;PCODE: $00000274 VOL: 0
+;PCODE: $00000275 VOL: 0
+; 0000 006C }
+;PCODE: $00000276 VOL: 0
 ;
 ;// TWI functions
 ;#include <twi.h>
 ;
 ;
-;float adc2Vout(float adc);
-;float adc2Vbat(float adc);
-;float zxct1107(float adc);
+;void hw_init(void);
 ;
 ;
 ;void main(void)
-; 0000 0050 {
-;PCODE: $00000255 VOL: 0
-; 0000 0051 // Declare your local variables here
-; 0000 0052 
-; 0000 0053 
-; 0000 0054 // Crystal Oscillator division factor: 1
-; 0000 0055 #pragma optsize-
-; 0000 0056 CLKPR=(1<<CLKPCE);
-;PCODE: $00000256 VOL: 0
-;PCODE: $00000257 VOL: 0
-; 0000 0057 CLKPR=(0<<CLKPCE) | (0<<CLKPS3) | (0<<CLKPS2) | (0<<CLKPS1) | (0<<CLKPS0);
-;PCODE: $00000258 VOL: 0
-;PCODE: $00000259 VOL: 0
-; 0000 0058 #ifdef _OPTIMIZE_SIZE_
-; 0000 0059 #pragma optsize+
-; 0000 005A #endif
-; 0000 005B 
-; 0000 005C // Reset Source checking
-; 0000 005D if (MCUSR & (1<<PORF))
-;PCODE: $0000025A VOL: 0
-;PCODE: $0000025B VOL: 0
-;PCODE: $0000025C VOL: 0
-;PCODE: $0000025D VOL: 0
-; 0000 005E    {
-; 0000 005F    // Power-on Reset
-; 0000 0060    MCUSR=0;
-;PCODE: $0000025E VOL: 0
-;PCODE: $0000025F VOL: 0
-; 0000 0061    // Place your code here
-; 0000 0062 
-; 0000 0063    }
-; 0000 0064 else if (MCUSR & (1<<EXTRF))
-;PCODE: $00000260 VOL: 0
-;PCODE: $00000261 VOL: 0
-;PCODE: $00000262 VOL: 0
-;PCODE: $00000263 VOL: 0
-;PCODE: $00000264 VOL: 0
-;PCODE: $00000265 VOL: 0
-; 0000 0065    {
-; 0000 0066    // External Reset
-; 0000 0067    MCUSR=0;
-;PCODE: $00000266 VOL: 0
-;PCODE: $00000267 VOL: 0
-; 0000 0068    // Place your code here
-; 0000 0069 
-; 0000 006A    }
-; 0000 006B else if (MCUSR & (1<<BORF))
-;PCODE: $00000268 VOL: 0
-;PCODE: $00000269 VOL: 0
-;PCODE: $0000026A VOL: 0
-;PCODE: $0000026B VOL: 0
-;PCODE: $0000026C VOL: 0
-;PCODE: $0000026D VOL: 0
-; 0000 006C    {
-; 0000 006D    // Brown-Out Reset
-; 0000 006E    MCUSR=0;
-;PCODE: $0000026E VOL: 0
-;PCODE: $0000026F VOL: 0
-; 0000 006F    // Place your code here
-; 0000 0070 
-; 0000 0071    }
-; 0000 0072 else
-;PCODE: $00000270 VOL: 0
-;PCODE: $00000271 VOL: 0
-; 0000 0073    {
-; 0000 0074    // Watchdog Reset
-; 0000 0075    MCUSR=0;
-;PCODE: $00000272 VOL: 0
-;PCODE: $00000273 VOL: 0
-; 0000 0076    // Place your code here
-; 0000 0077 
-; 0000 0078    }
-;PCODE: $00000274 VOL: 0
-;PCODE: $00000275 VOL: 0
-;PCODE: $00000276 VOL: 0
-; 0000 0079 
-; 0000 007A // Input/Output Ports initialization
-; 0000 007B // Port B initialization
-; 0000 007C // Function: Bit7=Out Bit6=Out Bit5=In Bit4=In Bit3=In Bit2=In Bit1=In Bit0=In
-; 0000 007D DDRB=(1<<DDB7) | (1<<DDB6) | (0<<DDB5) | (0<<DDB4) | (0<<DDB3) | (0<<DDB2) | (0<<DDB1) | (0<<DDB0);
+; 0000 0076 {
 ;PCODE: $00000277 VOL: 0
+; 0000 0077 // Declare your local variables here
+; 0000 0078 
+; 0000 0079 // Crystal Oscillator division factor: 1
+; 0000 007A #pragma optsize-
+; 0000 007B CLKPR=(1<<CLKPCE);
 ;PCODE: $00000278 VOL: 0
-; 0000 007E // State: Bit7=0 Bit6=0 Bit5=T Bit4=T Bit3=T Bit2=T Bit1=T Bit0=T
-; 0000 007F PORTB=(0<<PORTB7) | (0<<PORTB6) | (0<<PORTB5) | (0<<PORTB4) | (0<<PORTB3) | (0<<PORTB2) | (0<<PORTB1) | (0<<PORTB0);
 ;PCODE: $00000279 VOL: 0
+; 0000 007C CLKPR=(0<<CLKPCE) | (0<<CLKPS3) | (0<<CLKPS2) | (0<<CLKPS1) | (0<<CLKPS0);
 ;PCODE: $0000027A VOL: 0
-; 0000 0080 
-; 0000 0081 // Port C initialization
-; 0000 0082 // Function: Bit6=In Bit5=In Bit4=In Bit3=In Bit2=In Bit1=In Bit0=In
-; 0000 0083 DDRC=(0<<DDC6) | (0<<DDC5) | (0<<DDC4) | (0<<DDC3) | (0<<DDC2) | (0<<DDC1) | (0<<DDC0);
 ;PCODE: $0000027B VOL: 0
+; 0000 007D #ifdef _OPTIMIZE_SIZE_
+; 0000 007E #pragma optsize+
+; 0000 007F #endif
+; 0000 0080 
+; 0000 0081 // Checa Fuente de Reset
+; 0000 0082 if (MCUSR & (1<<PORF))
 ;PCODE: $0000027C VOL: 0
-; 0000 0084 // State: Bit6=T Bit5=T Bit4=T Bit3=T Bit2=T Bit1=T Bit0=T
-; 0000 0085 PORTC=(0<<PORTC6) | (0<<PORTC5) | (0<<PORTC4) | (0<<PORTC3) | (0<<PORTC2) | (0<<PORTC1) | (0<<PORTC0);
 ;PCODE: $0000027D VOL: 0
 ;PCODE: $0000027E VOL: 0
-; 0000 0086 
-; 0000 0087 // Port D initialization
-; 0000 0088 // Function: Bit7=In Bit6=In Bit5=In Bit4=In Bit3=In Bit2=In Bit1=In Bit0=In
-; 0000 0089 DDRD=(0<<DDD7) | (0<<DDD6) | (0<<DDD5) | (0<<DDD4) | (0<<DDD3) | (0<<DDD2) | (0<<DDD1) | (0<<DDD0);
 ;PCODE: $0000027F VOL: 0
+; 0000 0083    {
+; 0000 0084    // Power-on
+; 0000 0085    MCUSR=0;
 ;PCODE: $00000280 VOL: 0
-; 0000 008A // State: Bit7=T Bit6=T Bit5=T Bit4=T Bit3=T Bit2=T Bit1=T Bit0=T
-; 0000 008B PORTD=(0<<PORTD7) | (0<<PORTD6) | (0<<PORTD5) | (0<<PORTD4) | (0<<PORTD3) | (0<<PORTD2) | (0<<PORTD1) | (0<<PORTD0);
 ;PCODE: $00000281 VOL: 0
+; 0000 0086    // Place your code here
+; 0000 0087 
+; 0000 0088    }
+; 0000 0089 else if (MCUSR & (1<<EXTRF))
 ;PCODE: $00000282 VOL: 0
-; 0000 008C 
-; 0000 008D // Timer/Counter 0 initialization
-; 0000 008E // Clock source: System Clock
-; 0000 008F // Clock value: Timer 0 Stopped
-; 0000 0090 // Mode: Normal top=0xFF
-; 0000 0091 // OC0A output: Disconnected
-; 0000 0092 // OC0B output: Disconnected
-; 0000 0093 TCCR0A=(0<<COM0A1) | (0<<COM0A0) | (0<<COM0B1) | (0<<COM0B0) | (0<<WGM01) | (0<<WGM00);
 ;PCODE: $00000283 VOL: 0
 ;PCODE: $00000284 VOL: 0
-; 0000 0094 TCCR0B=(0<<WGM02) | (0<<CS02) | (0<<CS01) | (0<<CS00);
 ;PCODE: $00000285 VOL: 0
 ;PCODE: $00000286 VOL: 0
-; 0000 0095 TCNT0=0x00;
 ;PCODE: $00000287 VOL: 0
+; 0000 008A    {
+; 0000 008B    // Reset Externo
+; 0000 008C    MCUSR=0;
 ;PCODE: $00000288 VOL: 0
-; 0000 0096 OCR0A=0x00;
 ;PCODE: $00000289 VOL: 0
+; 0000 008D    // Place your code here
+; 0000 008E 
+; 0000 008F    }
+; 0000 0090 else if (MCUSR & (1<<BORF))
 ;PCODE: $0000028A VOL: 0
-; 0000 0097 OCR0B=0x00;
 ;PCODE: $0000028B VOL: 0
 ;PCODE: $0000028C VOL: 0
-; 0000 0098 
-; 0000 0099 // Timer/Counter 1 initialization
-; 0000 009A // Clock source: System Clock
-; 0000 009B // Clock value: Timer1 Stopped
-; 0000 009C // Mode: Normal top=0xFFFF
-; 0000 009D // OC1A output: Disconnected
-; 0000 009E // OC1B output: Disconnected
-; 0000 009F // Noise Canceler: Off
-; 0000 00A0 // Input Capture on Falling Edge
-; 0000 00A1 // Timer1 Overflow Interrupt: Off
-; 0000 00A2 // Input Capture Interrupt: Off
-; 0000 00A3 // Compare A Match Interrupt: Off
-; 0000 00A4 // Compare B Match Interrupt: Off
-; 0000 00A5 TCCR1A=(0<<COM1A1) | (0<<COM1A0) | (0<<COM1B1) | (0<<COM1B0) | (0<<WGM11) | (0<<WGM10);
 ;PCODE: $0000028D VOL: 0
 ;PCODE: $0000028E VOL: 0
-; 0000 00A6 TCCR1B=(0<<ICNC1) | (0<<ICES1) | (0<<WGM13) | (0<<WGM12) | (0<<CS12) | (0<<CS11) | (0<<CS10);
 ;PCODE: $0000028F VOL: 0
+; 0000 0091    {
+; 0000 0092    // Brown-Out
+; 0000 0093    MCUSR=0;
 ;PCODE: $00000290 VOL: 0
-; 0000 00A7 TCNT1H=0x00;
 ;PCODE: $00000291 VOL: 0
+; 0000 0094    // Place your code here
+; 0000 0095 
+; 0000 0096    }
+; 0000 0097 else
 ;PCODE: $00000292 VOL: 0
-; 0000 00A8 TCNT1L=0x00;
 ;PCODE: $00000293 VOL: 0
+; 0000 0098    {
+; 0000 0099    // Watchdog
+; 0000 009A    MCUSR=0;
 ;PCODE: $00000294 VOL: 0
-; 0000 00A9 ICR1H=0x00;
 ;PCODE: $00000295 VOL: 0
+; 0000 009B    // Place your code here
+; 0000 009C 
+; 0000 009D    }
 ;PCODE: $00000296 VOL: 0
-; 0000 00AA ICR1L=0x00;
 ;PCODE: $00000297 VOL: 0
 ;PCODE: $00000298 VOL: 0
-; 0000 00AB OCR1AH=0x00;
+; 0000 009E 
+; 0000 009F hw_init();
 ;PCODE: $00000299 VOL: 0
+; 0000 00A0 
+; 0000 00A1 LED_ROJO =  SEPIC_EN;
 ;PCODE: $0000029A VOL: 0
-; 0000 00AC OCR1AL=0x00;
 ;PCODE: $0000029B VOL: 0
 ;PCODE: $0000029C VOL: 0
-; 0000 00AD OCR1BH=0x00;
 ;PCODE: $0000029D VOL: 0
 ;PCODE: $0000029E VOL: 0
-; 0000 00AE OCR1BL=0x00;
 ;PCODE: $0000029F VOL: 0
 ;PCODE: $000002A0 VOL: 0
-; 0000 00AF 
-; 0000 00B0 // Timer/Counter 2 initialization
-; 0000 00B1 // Clock source: System Clock
-; 0000 00B2 // Clock value: Timer2 Stopped
-; 0000 00B3 // Mode: Normal top=0xFF
-; 0000 00B4 // OC2A output: Disconnected
-; 0000 00B5 // OC2B output: Disconnected
-; 0000 00B6 ASSR=(0<<EXCLK) | (0<<AS2);
 ;PCODE: $000002A1 VOL: 0
 ;PCODE: $000002A2 VOL: 0
-; 0000 00B7 TCCR2A=(0<<COM2A1) | (0<<COM2A0) | (0<<COM2B1) | (0<<COM2B0) | (0<<WGM21) | (0<<WGM20);
 ;PCODE: $000002A3 VOL: 0
+; 0000 00A2 LCD_I2C_begin(0);
 ;PCODE: $000002A4 VOL: 0
-; 0000 00B8 TCCR2B=(0<<WGM22) | (0<<CS22) | (0<<CS21) | (0<<CS20);
 ;PCODE: $000002A5 VOL: 0
+; 0000 00A3 LCD_I2C_backlight();
 ;PCODE: $000002A6 VOL: 0
-; 0000 00B9 TCNT2=0x00;
+; 0000 00A4 LCD_I2C_setCursor(0, 0);
 ;PCODE: $000002A7 VOL: 0
 ;PCODE: $000002A8 VOL: 0
-; 0000 00BA OCR2A=0x00;
 ;PCODE: $000002A9 VOL: 0
 ;PCODE: $000002AA VOL: 0
-; 0000 00BB OCR2B=0x00;
+; 0000 00A5 LCD_I2C_puts("Nomadas");
 ;PCODE: $000002AB VOL: 0
 ;PCODE: $000002AC VOL: 0
-; 0000 00BC 
-; 0000 00BD // Timer/Counter 0 Interrupt(s) initialization
-; 0000 00BE TIMSK0=(0<<OCIE0B) | (0<<OCIE0A) | (0<<TOIE0);
 ;PCODE: $000002AD VOL: 0
+; 0000 00A6 LCD_I2C_setCursor(0, 1);
 ;PCODE: $000002AE VOL: 0
-; 0000 00BF 
-; 0000 00C0 // Timer/Counter 1 Interrupt(s) initialization
-; 0000 00C1 TIMSK1=(0<<ICIE1) | (0<<OCIE1B) | (0<<OCIE1A) | (0<<TOIE1);
 ;PCODE: $000002AF VOL: 0
 ;PCODE: $000002B0 VOL: 0
-; 0000 00C2 
-; 0000 00C3 // Timer/Counter 2 Interrupt(s) initialization
-; 0000 00C4 TIMSK2=(0<<OCIE2B) | (0<<OCIE2A) | (0<<TOIE2);
 ;PCODE: $000002B1 VOL: 0
+; 0000 00A7 LCD_I2C_puts("    Electronicos");
 ;PCODE: $000002B2 VOL: 0
-; 0000 00C5 
-; 0000 00C6 // External Interrupt(s) initialization
-; 0000 00C7 // INT0: Off
-; 0000 00C8 // INT1: Off
-; 0000 00C9 // Interrupt on any change on pins PCINT0-7: Off
-; 0000 00CA // Interrupt on any change on pins PCINT8-14: Off
-; 0000 00CB // Interrupt on any change on pins PCINT16-23: Off
-; 0000 00CC EICRA=(0<<ISC11) | (0<<ISC10) | (0<<ISC01) | (0<<ISC00);
 ;PCODE: $000002B3 VOL: 0
 ;PCODE: $000002B4 VOL: 0
-; 0000 00CD EIMSK=(0<<INT1) | (0<<INT0);
+; 0000 00A8 delay_ms(1500);
 ;PCODE: $000002B5 VOL: 0
 ;PCODE: $000002B6 VOL: 0
-; 0000 00CE PCICR=(0<<PCIE2) | (0<<PCIE1) | (0<<PCIE0);
+; 0000 00A9 
+; 0000 00AA while(1)
 ;PCODE: $000002B7 VOL: 0
+; 0000 00AB {
+; 0000 00AC     //Etapa en la que pasan las variables de adc
+; 0000 00AD     LED_VERDE = 1;
 ;PCODE: $000002B8 VOL: 0
-; 0000 00CF 
-; 0000 00D0 // USART initialization
-; 0000 00D1 // USART disabled
-; 0000 00D2 UCSR0B=(0<<RXCIE0) | (0<<TXCIE0) | (0<<UDRIE0) | (0<<RXEN0) | (0<<TXEN0) | (0<<UCSZ02) | (0<<RXB80) | (0<<TXB80);
 ;PCODE: $000002B9 VOL: 0
+; 0000 00AE     // #asm("cli")
+; 0000 00AF     g_pre_cent = read_adc(ADC_CENT);
 ;PCODE: $000002BA VOL: 0
-; 0000 00D3 
-; 0000 00D4 // Analog Comparator initialization
-; 0000 00D5 // Analog Comparator: Off
-; 0000 00D6 // The Analog Comparator's positive input is
-; 0000 00D7 // connected to the AIN0 pin
-; 0000 00D8 // The Analog Comparator's negative input is
-; 0000 00D9 // connected to the AIN1 pin
-; 0000 00DA ACSR=(1<<ACD) | (0<<ACBG) | (0<<ACO) | (0<<ACI) | (0<<ACIE) | (0<<ACIC) | (0<<ACIS1) | (0<<ACIS0);
 ;PCODE: $000002BB VOL: 0
 ;PCODE: $000002BC VOL: 0
-; 0000 00DB // Digital input buffer on AIN0: On
-; 0000 00DC // Digital input buffer on AIN1: On
-; 0000 00DD DIDR1=(0<<AIN0D) | (0<<AIN1D);
 ;PCODE: $000002BD VOL: 0
 ;PCODE: $000002BE VOL: 0
-; 0000 00DE 
-; 0000 00DF // ADC initialization
-; 0000 00E0 // ADC Clock frequency: 1000.000 kHz
-; 0000 00E1 // ADC Voltage Reference: AREF pin
-; 0000 00E2 // ADC Auto Trigger Source: Free Running
-; 0000 00E3 // Digital input buffers on ADC0: On, ADC1: On, ADC2: On, ADC3: On
-; 0000 00E4 // ADC4: On, ADC5: On
-; 0000 00E5 DIDR0=(0<<ADC5D) | (0<<ADC4D) | (0<<ADC3D) | (0<<ADC2D) | (0<<ADC1D) | (0<<ADC0D);
+; 0000 00B0     g_pre_csal = read_adc(ADC_CSAL);
 ;PCODE: $000002BF VOL: 0
 ;PCODE: $000002C0 VOL: 0
-; 0000 00E6 ADMUX=FIRST_ADC_INPUT | ADC_VREF_TYPE;
 ;PCODE: $000002C1 VOL: 0
 ;PCODE: $000002C2 VOL: 0
-; 0000 00E7 ADCSRA=(1<<ADEN) | (1<<ADSC) | (1<<ADATE) | (0<<ADIF) | (1<<ADIE) | (0<<ADPS2) | (1<<ADPS1) | (1<<ADPS0);
 ;PCODE: $000002C3 VOL: 0
+; 0000 00B1     g_pre_vbat = read_adc(ADC_VBAT);
 ;PCODE: $000002C4 VOL: 0
-; 0000 00E8 ADCSRB=(0<<ADTS2) | (0<<ADTS1) | (0<<ADTS0);
 ;PCODE: $000002C5 VOL: 0
 ;PCODE: $000002C6 VOL: 0
-; 0000 00E9 
-; 0000 00EA // SPI initialization
-; 0000 00EB // SPI disabled
-; 0000 00EC SPCR=(0<<SPIE) | (0<<SPE) | (0<<DORD) | (0<<MSTR) | (0<<CPOL) | (0<<CPHA) | (0<<SPR1) | (0<<SPR0);
 ;PCODE: $000002C7 VOL: 0
 ;PCODE: $000002C8 VOL: 0
-; 0000 00ED 
-; 0000 00EE // TWI initialization
-; 0000 00EF // Mode: TWI Master
-; 0000 00F0 // Bit Rate: 100 kHz
-; 0000 00F1 twi_master_init(100);
+; 0000 00B2     g_pre_vsal = read_adc(ADC_VSAL);
 ;PCODE: $000002C9 VOL: 0
 ;PCODE: $000002CA VOL: 0
 ;PCODE: $000002CB VOL: 0
-; 0000 00F2 
-; 0000 00F3 // Global enable interrupts
-; 0000 00F4 #asm("sei")
 ;PCODE: $000002CC VOL: 0
-	sei
 ;PCODE: $000002CD VOL: 0
-; 0000 00F5 ADCSRA|=(1<<ADSC);
+; 0000 00B3     g_pre_vent = read_adc(ADC_VENT);
 ;PCODE: $000002CE VOL: 0
 ;PCODE: $000002CF VOL: 0
 ;PCODE: $000002D0 VOL: 0
-; 0000 00F6 
-; 0000 00F7 LCD_I2C_begin(0);
 ;PCODE: $000002D1 VOL: 0
 ;PCODE: $000002D2 VOL: 0
-; 0000 00F8 LCD_I2C_backlight();
+; 0000 00B4     // #asm("sei")
+; 0000 00B5     LED_VERDE = 0;
 ;PCODE: $000002D3 VOL: 0
-; 0000 00F9 LCD_I2C_setCursor(0, 0);
 ;PCODE: $000002D4 VOL: 0
+; 0000 00B6 
+; 0000 00B7 
+; 0000 00B8     //Se hacen todos los calculos
+; 0000 00B9 
+; 0000 00BA     g_cent = 0.0048875855 * g_pre_cent; // zxct1107 en [A] (5/1023)
 ;PCODE: $000002D5 VOL: 0
 ;PCODE: $000002D6 VOL: 0
 ;PCODE: $000002D7 VOL: 0
-; 0000 00FA LCD_I2C_puts("Nomadas");
 ;PCODE: $000002D8 VOL: 0
+; 0000 00BB     g_csal = 0.0048875855 * g_pre_csal;
 ;PCODE: $000002D9 VOL: 0
 ;PCODE: $000002DA VOL: 0
-; 0000 00FB LCD_I2C_setCursor(0, 1);
 ;PCODE: $000002DB VOL: 0
 ;PCODE: $000002DC VOL: 0
+; 0000 00BC 
+; 0000 00BD                                      // (1+(Ra/Rb))*(5/1023)
+; 0000 00BE     g_vent = 0.0278592 * g_pre_vent; // Ra = 470k, Rb = 100k
 ;PCODE: $000002DD VOL: 0
 ;PCODE: $000002DE VOL: 0
-; 0000 00FC LCD_I2C_puts("    Electronicos");
 ;PCODE: $000002DF VOL: 0
 ;PCODE: $000002E0 VOL: 0
+; 0000 00BF     g_vbat = 0.0146628 * g_pre_vbat; // Ra = 200k, Rb = 100k
 ;PCODE: $000002E1 VOL: 0
-; 0000 00FD delay_ms(1500);
 ;PCODE: $000002E2 VOL: 0
 ;PCODE: $000002E3 VOL: 0
-; 0000 00FE 
-; 0000 00FF while (1)
 ;PCODE: $000002E4 VOL: 0
-; 0000 0100       {
-; 0000 0101       // Place your code here
-; 0000 0102 
-; 0000 0103           //Muestra los valores de Corriente de Entrada y voltaje de Bateria
-; 0000 0104           for(i=0; i<NUM_DESPLIEGUES; i++)
+; 0000 00C0     g_vsal = 0.0146628 * g_pre_vsal; // Ra = 200k, Rb = 100k
 ;PCODE: $000002E5 VOL: 0
 ;PCODE: $000002E6 VOL: 0
 ;PCODE: $000002E7 VOL: 0
 ;PCODE: $000002E8 VOL: 0
+; 0000 00C1 
+; 0000 00C2     g_pent = g_cent * g_vent;        //Potencia de entrada
 ;PCODE: $000002E9 VOL: 0
 ;PCODE: $000002EA VOL: 0
 ;PCODE: $000002EB VOL: 0
 ;PCODE: $000002EC VOL: 0
+; 0000 00C3     g_psal = g_csal * g_vsal;        //Potencia de salida
 ;PCODE: $000002ED VOL: 0
-; 0000 0105           {
-; 0000 0106            LED_ROJO =1;
 ;PCODE: $000002EE VOL: 0
 ;PCODE: $000002EF VOL: 0
-; 0000 0107            // Asegura que a media lectura no entre en interrupcion
-; 0000 0108            #asm("cli")
 ;PCODE: $000002F0 VOL: 0
-	cli
+; 0000 00C4 
+; 0000 00C5     g_eff = 100.0 * g_psal/g_pent;   //Eficiencia
 ;PCODE: $000002F1 VOL: 0
-; 0000 0109            pre_corriente = (float)adc_data[0];
 ;PCODE: $000002F2 VOL: 0
 ;PCODE: $000002F3 VOL: 0
 ;PCODE: $000002F4 VOL: 0
-; 0000 010A            pre_voltaje   = (float)adc_data[2];
 ;PCODE: $000002F5 VOL: 0
 ;PCODE: $000002F6 VOL: 0
 ;PCODE: $000002F7 VOL: 0
+; 0000 00C6 
+; 0000 00C7     //Se muestran los resultados
+; 0000 00C8 
+; 0000 00C9     switch(desplegar_estado)
 ;PCODE: $000002F8 VOL: 0
-; 0000 010B            #asm("sei")
 ;PCODE: $000002F9 VOL: 0
-	sei
+; 0000 00CA     {
+; 0000 00CB         case 0:
 ;PCODE: $000002FA VOL: 0
-; 0000 010C 
-; 0000 010D            //Adapta
-; 0000 010E            corriente =  (1000.0*zxct1107(pre_corriente));
 ;PCODE: $000002FB VOL: 0
+; 0000 00CC                 sprintf(buffer_lcd, "Ient:%6.1f[mA]    ", g_cent*1000.0);
 ;PCODE: $000002FC VOL: 0
 ;PCODE: $000002FD VOL: 0
 ;PCODE: $000002FE VOL: 0
 ;PCODE: $000002FF VOL: 0
-; 0000 010F            voltaje   =  adc2Vbat(pre_voltaje);
 ;PCODE: $00000300 VOL: 0
 ;PCODE: $00000301 VOL: 0
 ;PCODE: $00000302 VOL: 0
-; 0000 0110 
-; 0000 0111            //Despliega
-; 0000 0112            sprintf(buffer_lcd, "Ient:%6.1f[mA]    ", corriente);
 ;PCODE: $00000303 VOL: 0
 ;PCODE: $00000304 VOL: 0
 ;PCODE: $00000305 VOL: 0
 ;PCODE: $00000306 VOL: 0
 ;PCODE: $00000307 VOL: 0
 ;PCODE: $00000308 VOL: 0
+; 0000 00CD                 LCD_I2C_setCursor(0, 0);
 ;PCODE: $00000309 VOL: 0
 ;PCODE: $0000030A VOL: 0
 ;PCODE: $0000030B VOL: 0
 ;PCODE: $0000030C VOL: 0
+; 0000 00CE                 LCD_I2C_puts(buffer_lcd);
 ;PCODE: $0000030D VOL: 0
-; 0000 0113            LCD_I2C_setCursor(0, 0);
 ;PCODE: $0000030E VOL: 0
+; 0000 00CF                 sprintf(buffer_lcd, "Vent: %5.2f[V]    ", g_vent);
 ;PCODE: $0000030F VOL: 0
 ;PCODE: $00000310 VOL: 0
 ;PCODE: $00000311 VOL: 0
-; 0000 0114            LCD_I2C_puts(buffer_lcd);
 ;PCODE: $00000312 VOL: 0
 ;PCODE: $00000313 VOL: 0
-; 0000 0115            sprintf(buffer_lcd, "Vbat: %5.2f[V]    ", voltaje);
 ;PCODE: $00000314 VOL: 0
 ;PCODE: $00000315 VOL: 0
 ;PCODE: $00000316 VOL: 0
 ;PCODE: $00000317 VOL: 0
 ;PCODE: $00000318 VOL: 0
 ;PCODE: $00000319 VOL: 0
+; 0000 00D0                 LCD_I2C_setCursor(0, 1);
 ;PCODE: $0000031A VOL: 0
 ;PCODE: $0000031B VOL: 0
 ;PCODE: $0000031C VOL: 0
 ;PCODE: $0000031D VOL: 0
+; 0000 00D1                 LCD_I2C_puts(buffer_lcd);
 ;PCODE: $0000031E VOL: 0
-; 0000 0116            //sprintf(buffer_lcd, "Vbat: %6.1f[V]    ", pre_voltaje);
-; 0000 0117            LCD_I2C_setCursor(0, 1);
 ;PCODE: $0000031F VOL: 0
+; 0000 00D2                 break;
 ;PCODE: $00000320 VOL: 0
+; 0000 00D3         case 1:
 ;PCODE: $00000321 VOL: 0
 ;PCODE: $00000322 VOL: 0
-; 0000 0118            LCD_I2C_puts(buffer_lcd);
 ;PCODE: $00000323 VOL: 0
+; 0000 00D4                 sprintf(buffer_lcd, "Isal:%6.1f[mA]    ", g_csal*1000.0);
 ;PCODE: $00000324 VOL: 0
-; 0000 0119 
-; 0000 011A            LED_ROJO=0;
 ;PCODE: $00000325 VOL: 0
 ;PCODE: $00000326 VOL: 0
-; 0000 011B            delay_ms(50);
 ;PCODE: $00000327 VOL: 0
 ;PCODE: $00000328 VOL: 0
 ;PCODE: $00000329 VOL: 0
-; 0000 011C           }
 ;PCODE: $0000032A VOL: 0
 ;PCODE: $0000032B VOL: 0
 ;PCODE: $0000032C VOL: 0
 ;PCODE: $0000032D VOL: 0
 ;PCODE: $0000032E VOL: 0
 ;PCODE: $0000032F VOL: 0
-; 0000 011D 
-; 0000 011E 
-; 0000 011F           //Muestra los valores de Voltaje y Corriente de Salida
-; 0000 0120           for(i=0; i<NUM_DESPLIEGUES; i++)
 ;PCODE: $00000330 VOL: 0
+; 0000 00D5                 LCD_I2C_setCursor(0, 0);
 ;PCODE: $00000331 VOL: 0
 ;PCODE: $00000332 VOL: 0
 ;PCODE: $00000333 VOL: 0
 ;PCODE: $00000334 VOL: 0
+; 0000 00D6                 LCD_I2C_puts(buffer_lcd);
 ;PCODE: $00000335 VOL: 0
 ;PCODE: $00000336 VOL: 0
+; 0000 00D7                 sprintf(buffer_lcd, "Vsal: %5.2f[V]    ", g_vsal);
 ;PCODE: $00000337 VOL: 0
 ;PCODE: $00000338 VOL: 0
-; 0000 0121           {
-; 0000 0122            LED_ROJO =1;
 ;PCODE: $00000339 VOL: 0
 ;PCODE: $0000033A VOL: 0
-; 0000 0123            // Asegura que a media lectura no entre en interrupcion
-; 0000 0124            #asm("cli")
 ;PCODE: $0000033B VOL: 0
-	cli
 ;PCODE: $0000033C VOL: 0
-; 0000 0125            pre_corriente = (float)adc_data[1];
 ;PCODE: $0000033D VOL: 0
 ;PCODE: $0000033E VOL: 0
 ;PCODE: $0000033F VOL: 0
 ;PCODE: $00000340 VOL: 0
-; 0000 0126            pre_voltaje   = (float)adc_data[3];
 ;PCODE: $00000341 VOL: 0
+; 0000 00D8                 LCD_I2C_setCursor(0, 1);
 ;PCODE: $00000342 VOL: 0
 ;PCODE: $00000343 VOL: 0
 ;PCODE: $00000344 VOL: 0
-; 0000 0127            #asm("sei")
 ;PCODE: $00000345 VOL: 0
-	sei
+; 0000 00D9                 LCD_I2C_puts(buffer_lcd);
 ;PCODE: $00000346 VOL: 0
-; 0000 0128 
-; 0000 0129            //Adapta
-; 0000 012A            corriente =  (1000.0*zxct1107(pre_corriente));
 ;PCODE: $00000347 VOL: 0
+; 0000 00DA                 break;
 ;PCODE: $00000348 VOL: 0
+; 0000 00DB         case 2:
 ;PCODE: $00000349 VOL: 0
 ;PCODE: $0000034A VOL: 0
 ;PCODE: $0000034B VOL: 0
-; 0000 012B            voltaje   =  adc2Vout(pre_voltaje);
+; 0000 00DC                 sprintf(buffer_lcd, "Pent:%6.1f[W]    ", g_pent);
 ;PCODE: $0000034C VOL: 0
 ;PCODE: $0000034D VOL: 0
 ;PCODE: $0000034E VOL: 0
-; 0000 012C 
-; 0000 012D            //Despliega
-; 0000 012E            sprintf(buffer_lcd, "Isal:%6.1f[mA]    ", corriente);
 ;PCODE: $0000034F VOL: 0
 ;PCODE: $00000350 VOL: 0
 ;PCODE: $00000351 VOL: 0
@@ -1189,18 +1103,18 @@
 ;PCODE: $00000354 VOL: 0
 ;PCODE: $00000355 VOL: 0
 ;PCODE: $00000356 VOL: 0
+; 0000 00DD                 LCD_I2C_setCursor(0, 0);
 ;PCODE: $00000357 VOL: 0
 ;PCODE: $00000358 VOL: 0
 ;PCODE: $00000359 VOL: 0
-; 0000 012F            LCD_I2C_setCursor(0, 0);
 ;PCODE: $0000035A VOL: 0
+; 0000 00DE                 LCD_I2C_puts(buffer_lcd);
 ;PCODE: $0000035B VOL: 0
 ;PCODE: $0000035C VOL: 0
+; 0000 00DF                 sprintf(buffer_lcd, "Psal:%6.1f[W]    ", g_psal);
 ;PCODE: $0000035D VOL: 0
-; 0000 0130            LCD_I2C_puts(buffer_lcd);
 ;PCODE: $0000035E VOL: 0
 ;PCODE: $0000035F VOL: 0
-; 0000 0131            sprintf(buffer_lcd, "Vsal: %5.2f[V]    ", voltaje);
 ;PCODE: $00000360 VOL: 0
 ;PCODE: $00000361 VOL: 0
 ;PCODE: $00000362 VOL: 0
@@ -1209,57 +1123,42 @@
 ;PCODE: $00000365 VOL: 0
 ;PCODE: $00000366 VOL: 0
 ;PCODE: $00000367 VOL: 0
+; 0000 00E0                 LCD_I2C_setCursor(0, 1);
 ;PCODE: $00000368 VOL: 0
 ;PCODE: $00000369 VOL: 0
 ;PCODE: $0000036A VOL: 0
-; 0000 0132            //sprintf(buffer_lcd, "Vsal: %6.1f[V]    ", pre_voltaje);
-; 0000 0133            LCD_I2C_setCursor(0, 1);
 ;PCODE: $0000036B VOL: 0
+; 0000 00E1                 LCD_I2C_puts(buffer_lcd);
 ;PCODE: $0000036C VOL: 0
 ;PCODE: $0000036D VOL: 0
+; 0000 00E2                 break;
 ;PCODE: $0000036E VOL: 0
-; 0000 0134            LCD_I2C_puts(buffer_lcd);
+; 0000 00E3         case 3:
 ;PCODE: $0000036F VOL: 0
 ;PCODE: $00000370 VOL: 0
-; 0000 0135 
-; 0000 0136            LED_ROJO=0;
 ;PCODE: $00000371 VOL: 0
+; 0000 00E4                 sprintf(buffer_lcd, "Eff: %6.1f[%%]    ", g_eff);
 ;PCODE: $00000372 VOL: 0
-; 0000 0137            delay_ms(50);
 ;PCODE: $00000373 VOL: 0
 ;PCODE: $00000374 VOL: 0
 ;PCODE: $00000375 VOL: 0
-; 0000 0138           }
 ;PCODE: $00000376 VOL: 0
 ;PCODE: $00000377 VOL: 0
 ;PCODE: $00000378 VOL: 0
 ;PCODE: $00000379 VOL: 0
 ;PCODE: $0000037A VOL: 0
 ;PCODE: $0000037B VOL: 0
-; 0000 0139 
-; 0000 013A       }
 ;PCODE: $0000037C VOL: 0
+; 0000 00E5                 LCD_I2C_setCursor(0, 0);
 ;PCODE: $0000037D VOL: 0
-; 0000 013B }
 ;PCODE: $0000037E VOL: 0
 ;PCODE: $0000037F VOL: 0
 ;PCODE: $00000380 VOL: 0
-
-	.DSEG
-_0x15:
-	.BYTE 0x19
-;
-;
-;float adc2Vout(float adc)
-; 0000 013F {
-
-	.CSEG
+; 0000 00E6                 LCD_I2C_puts(buffer_lcd);
 ;PCODE: $00000381 VOL: 0
 ;PCODE: $00000382 VOL: 0
-; 0000 0140  // por regresion lineal
-; 0000 0141  return 0.014812 * adc + 0.012666;
+; 0000 00E7                 sprintf(buffer_lcd, "Vbat: %5.2f[V]    ", g_vbat);
 ;PCODE: $00000383 VOL: 0
-;	adc -> Y+0
 ;PCODE: $00000384 VOL: 0
 ;PCODE: $00000385 VOL: 0
 ;PCODE: $00000386 VOL: 0
@@ -1267,41 +1166,372 @@ _0x15:
 ;PCODE: $00000388 VOL: 0
 ;PCODE: $00000389 VOL: 0
 ;PCODE: $0000038A VOL: 0
-; 0000 0142  //return  adc * 0.0048875855;
-; 0000 0143 }
 ;PCODE: $0000038B VOL: 0
-;
-;float adc2Vbat(float adc)
-; 0000 0146 {
 ;PCODE: $0000038C VOL: 0
 ;PCODE: $0000038D VOL: 0
-; 0000 0147  return 0.028595 * adc - 0.007506;
+; 0000 00E8                 LCD_I2C_setCursor(0, 1);
 ;PCODE: $0000038E VOL: 0
-;	adc -> Y+0
 ;PCODE: $0000038F VOL: 0
 ;PCODE: $00000390 VOL: 0
 ;PCODE: $00000391 VOL: 0
+; 0000 00E9                 LCD_I2C_puts(buffer_lcd);
 ;PCODE: $00000392 VOL: 0
 ;PCODE: $00000393 VOL: 0
+; 0000 00EA                 break;
 ;PCODE: $00000394 VOL: 0
+; 0000 00EB         case 4:
 ;PCODE: $00000395 VOL: 0
 ;PCODE: $00000396 VOL: 0
 ;PCODE: $00000397 VOL: 0
-; 0000 0148 }
+; 0000 00EC                 sprintf(buffer_lcd, "%04d %04d %04d ", (int)g_pre_cent, (int)g_pre_csal, (int)g_pre_vbat);
 ;PCODE: $00000398 VOL: 0
-;
-;float zxct1107(float adc)
-; 0000 014B {
 ;PCODE: $00000399 VOL: 0
 ;PCODE: $0000039A VOL: 0
-; 0000 014C           //   5.0/1024.0
-; 0000 014D  return  adc * 0.0048875855;
 ;PCODE: $0000039B VOL: 0
-;	adc -> Y+0
 ;PCODE: $0000039C VOL: 0
 ;PCODE: $0000039D VOL: 0
 ;PCODE: $0000039E VOL: 0
 ;PCODE: $0000039F VOL: 0
 ;PCODE: $000003A0 VOL: 0
-; 0000 014E }
 ;PCODE: $000003A1 VOL: 0
+;PCODE: $000003A2 VOL: 0
+;PCODE: $000003A3 VOL: 0
+;PCODE: $000003A4 VOL: 0
+;PCODE: $000003A5 VOL: 0
+;PCODE: $000003A6 VOL: 0
+;PCODE: $000003A7 VOL: 0
+;PCODE: $000003A8 VOL: 0
+;PCODE: $000003A9 VOL: 0
+;PCODE: $000003AA VOL: 0
+;PCODE: $000003AB VOL: 0
+;PCODE: $000003AC VOL: 0
+; 0000 00ED                 LCD_I2C_setCursor(0, 0);
+;PCODE: $000003AD VOL: 0
+;PCODE: $000003AE VOL: 0
+;PCODE: $000003AF VOL: 0
+;PCODE: $000003B0 VOL: 0
+; 0000 00EE                 LCD_I2C_puts(buffer_lcd);
+;PCODE: $000003B1 VOL: 0
+;PCODE: $000003B2 VOL: 0
+; 0000 00EF                 sprintf(buffer_lcd, "%04d %04d         ", (int)g_pre_vent, (int)g_pre_vsal);
+;PCODE: $000003B3 VOL: 0
+;PCODE: $000003B4 VOL: 0
+;PCODE: $000003B5 VOL: 0
+;PCODE: $000003B6 VOL: 0
+;PCODE: $000003B7 VOL: 0
+;PCODE: $000003B8 VOL: 0
+;PCODE: $000003B9 VOL: 0
+;PCODE: $000003BA VOL: 0
+;PCODE: $000003BB VOL: 0
+;PCODE: $000003BC VOL: 0
+;PCODE: $000003BD VOL: 0
+;PCODE: $000003BE VOL: 0
+;PCODE: $000003BF VOL: 0
+;PCODE: $000003C0 VOL: 0
+;PCODE: $000003C1 VOL: 0
+;PCODE: $000003C2 VOL: 0
+;PCODE: $000003C3 VOL: 0
+; 0000 00F0                 LCD_I2C_setCursor(0, 1);
+;PCODE: $000003C4 VOL: 0
+;PCODE: $000003C5 VOL: 0
+;PCODE: $000003C6 VOL: 0
+;PCODE: $000003C7 VOL: 0
+; 0000 00F1                 LCD_I2C_puts(buffer_lcd);
+;PCODE: $000003C8 VOL: 0
+;PCODE: $000003C9 VOL: 0
+; 0000 00F2                 break;
+;PCODE: $000003CA VOL: 0
+; 0000 00F3 
+; 0000 00F4     }
+;PCODE: $000003CB VOL: 0
+; 0000 00F5 
+; 0000 00F6     if(boton_display)
+;PCODE: $000003CC VOL: 0
+;PCODE: $000003CD VOL: 0
+; 0000 00F7     {
+; 0000 00F8       desplegar_estado = (++desplegar_estado)%5 ;
+;PCODE: $000003CE VOL: 0
+;PCODE: $000003CF VOL: 0
+;PCODE: $000003D0 VOL: 0
+;PCODE: $000003D1 VOL: 0
+;PCODE: $000003D2 VOL: 0
+;PCODE: $000003D3 VOL: 0
+; 0000 00F9       boton_display = 0;
+;PCODE: $000003D4 VOL: 0
+; 0000 00FA     }
+; 0000 00FB     if(boton_on_off)
+;PCODE: $000003D5 VOL: 0
+;PCODE: $000003D6 VOL: 0
+;PCODE: $000003D7 VOL: 0
+; 0000 00FC     {
+; 0000 00FD       SEPIC_EN = !(SEPIC_EN);
+;PCODE: $000003D8 VOL: 0
+;PCODE: $000003D9 VOL: 0
+;PCODE: $000003DA VOL: 0
+;PCODE: $000003DB VOL: 0
+;PCODE: $000003DC VOL: 0
+;PCODE: $000003DD VOL: 0
+;PCODE: $000003DE VOL: 0
+;PCODE: $000003DF VOL: 0
+;PCODE: $000003E0 VOL: 0
+;PCODE: $000003E1 VOL: 0
+; 0000 00FE       LED_ROJO =  SEPIC_EN;
+;PCODE: $000003E2 VOL: 0
+;PCODE: $000003E3 VOL: 0
+;PCODE: $000003E4 VOL: 0
+;PCODE: $000003E5 VOL: 0
+;PCODE: $000003E6 VOL: 0
+;PCODE: $000003E7 VOL: 0
+;PCODE: $000003E8 VOL: 0
+;PCODE: $000003E9 VOL: 0
+;PCODE: $000003EA VOL: 0
+;PCODE: $000003EB VOL: 0
+; 0000 00FF       boton_on_off = 0;
+;PCODE: $000003EC VOL: 0
+; 0000 0100     }
+; 0000 0101     //delay_ms(100);
+; 0000 0102 
+; 0000 0103 
+; 0000 0104 }
+;PCODE: $000003ED VOL: 0
+;PCODE: $000003EE VOL: 0
+;PCODE: $000003EF VOL: 0
+; 0000 0105 
+; 0000 0106 
+; 0000 0107 }
+;PCODE: $000003F0 VOL: 0
+;PCODE: $000003F1 VOL: 0
+;PCODE: $000003F2 VOL: 0
+
+	.DSEG
+_0x1F:
+	.BYTE 0x19
+;
+;void hw_init(void)
+; 0000 010A {
+
+	.CSEG
+;PCODE: $000003F3 VOL: 0
+;PCODE: $000003F4 VOL: 0
+; 0000 010B // Input/Output Ports initialization
+; 0000 010C // Port B initialization
+; 0000 010D // Function: Bit7=Out Bit6=Out Bit5=In Bit4=In Bit3=In Bit2=In Bit1=In Bit0=In
+; 0000 010E DDRB=(1<<DDB7) | (1<<DDB6) | (0<<DDB5) | (0<<DDB4) | (0<<DDB3) | (0<<DDB2) | (0<<DDB1) | (0<<DDB0);
+;PCODE: $000003F5 VOL: 0
+;PCODE: $000003F6 VOL: 0
+; 0000 010F // State: Bit7=0 Bit6=0 Bit5=T Bit4=T Bit3=T Bit2=T Bit1=T Bit0=T
+; 0000 0110 PORTB=(0<<PORTB7) | (0<<PORTB6) | (0<<PORTB5) | (0<<PORTB4) | (0<<PORTB3) | (0<<PORTB2) | (0<<PORTB1) | (0<<PORTB0);
+;PCODE: $000003F7 VOL: 0
+;PCODE: $000003F8 VOL: 0
+; 0000 0111 
+; 0000 0112 // Port C initialization
+; 0000 0113 // Function: Bit6=In Bit5=In Bit4=In Bit3=In Bit2=In Bit1=In Bit0=In
+; 0000 0114 DDRC=(0<<DDC6) | (0<<DDC5) | (0<<DDC4) | (0<<DDC3) | (0<<DDC2) | (0<<DDC1) | (0<<DDC0);
+;PCODE: $000003F9 VOL: 0
+;PCODE: $000003FA VOL: 0
+; 0000 0115 // State: Bit6=T Bit5=T Bit4=T Bit3=T Bit2=T Bit1=T Bit0=T
+; 0000 0116 PORTC=(0<<PORTC6) | (0<<PORTC5) | (0<<PORTC4) | (0<<PORTC3) | (0<<PORTC2) | (0<<PORTC1) | (0<<PORTC0);
+;PCODE: $000003FB VOL: 0
+;PCODE: $000003FC VOL: 0
+; 0000 0117 
+; 0000 0118 // Port D initialization
+; 0000 0119 // Function: Bit7=In Bit6=In Bit5=Out Bit4=In Bit3=In Bit2=In Bit1=In Bit0=In
+; 0000 011A DDRD=(0<<DDD7) | (0<<DDD6) | (1<<DDD5) | (0<<DDD4) | (0<<DDD3) | (0<<DDD2) | (0<<DDD1) | (0<<DDD0);
+;PCODE: $000003FD VOL: 0
+;PCODE: $000003FE VOL: 0
+; 0000 011B // State: Bit7=T Bit6=T Bit5=1 Bit4=T Bit3=T Bit2=T Bit1=T Bit0=T
+; 0000 011C PORTD=(0<<PORTD7) | (0<<PORTD6) | (1<<PORTD5) | (0<<PORTD4) | (0<<PORTD3) | (0<<PORTD2) | (0<<PORTD1) | (0<<PORTD0);
+;PCODE: $000003FF VOL: 0
+;PCODE: $00000400 VOL: 0
+; 0000 011D 
+; 0000 011E // Timer/Counter 0 initialization
+; 0000 011F // Clock source: System Clock
+; 0000 0120 // Clock value: Timer 0 Stopped
+; 0000 0121 // Mode: Normal top=0xFF
+; 0000 0122 // OC0A output: Disconnected
+; 0000 0123 // OC0B output: Disconnected
+; 0000 0124 TCCR0A=(0<<COM0A1) | (0<<COM0A0) | (0<<COM0B1) | (0<<COM0B0) | (0<<WGM01) | (0<<WGM00);
+;PCODE: $00000401 VOL: 0
+;PCODE: $00000402 VOL: 0
+; 0000 0125 TCCR0B=(0<<WGM02) | (0<<CS02) | (0<<CS01) | (0<<CS00);
+;PCODE: $00000403 VOL: 0
+;PCODE: $00000404 VOL: 0
+; 0000 0126 TCNT0=0x00;
+;PCODE: $00000405 VOL: 0
+;PCODE: $00000406 VOL: 0
+; 0000 0127 OCR0A=0x00;
+;PCODE: $00000407 VOL: 0
+;PCODE: $00000408 VOL: 0
+; 0000 0128 OCR0B=0x00;
+;PCODE: $00000409 VOL: 0
+;PCODE: $0000040A VOL: 0
+; 0000 0129 
+; 0000 012A // Timer/Counter 1 initialization
+; 0000 012B // Clock source: System Clock
+; 0000 012C // Clock value: Timer1 Stopped
+; 0000 012D // Mode: Normal top=0xFFFF
+; 0000 012E // OC1A output: Disconnected
+; 0000 012F // OC1B output: Disconnected
+; 0000 0130 // Noise Canceler: Off
+; 0000 0131 // Input Capture on Falling Edge
+; 0000 0132 // Timer1 Overflow Interrupt: Off
+; 0000 0133 // Input Capture Interrupt: Off
+; 0000 0134 // Compare A Match Interrupt: Off
+; 0000 0135 // Compare B Match Interrupt: Off
+; 0000 0136 TCCR1A=(0<<COM1A1) | (0<<COM1A0) | (0<<COM1B1) | (0<<COM1B0) | (0<<WGM11) | (0<<WGM10);
+;PCODE: $0000040B VOL: 0
+;PCODE: $0000040C VOL: 0
+; 0000 0137 TCCR1B=(0<<ICNC1) | (0<<ICES1) | (0<<WGM13) | (0<<WGM12) | (0<<CS12) | (0<<CS11) | (0<<CS10);
+;PCODE: $0000040D VOL: 0
+;PCODE: $0000040E VOL: 0
+; 0000 0138 TCNT1H=0x00;
+;PCODE: $0000040F VOL: 0
+;PCODE: $00000410 VOL: 0
+; 0000 0139 TCNT1L=0x00;
+;PCODE: $00000411 VOL: 0
+;PCODE: $00000412 VOL: 0
+; 0000 013A ICR1H=0x00;
+;PCODE: $00000413 VOL: 0
+;PCODE: $00000414 VOL: 0
+; 0000 013B ICR1L=0x00;
+;PCODE: $00000415 VOL: 0
+;PCODE: $00000416 VOL: 0
+; 0000 013C OCR1AH=0x00;
+;PCODE: $00000417 VOL: 0
+;PCODE: $00000418 VOL: 0
+; 0000 013D OCR1AL=0x00;
+;PCODE: $00000419 VOL: 0
+;PCODE: $0000041A VOL: 0
+; 0000 013E OCR1BH=0x00;
+;PCODE: $0000041B VOL: 0
+;PCODE: $0000041C VOL: 0
+; 0000 013F OCR1BL=0x00;
+;PCODE: $0000041D VOL: 0
+;PCODE: $0000041E VOL: 0
+; 0000 0140 
+; 0000 0141 // Timer/Counter 2 initialization
+; 0000 0142 // Clock source: System Clock
+; 0000 0143 // Clock value: Timer2 Stopped
+; 0000 0144 // Mode: Normal top=0xFF
+; 0000 0145 // OC2A output: Disconnected
+; 0000 0146 // OC2B output: Disconnected
+; 0000 0147 ASSR=(0<<EXCLK) | (0<<AS2);
+;PCODE: $0000041F VOL: 0
+;PCODE: $00000420 VOL: 0
+; 0000 0148 TCCR2A=(0<<COM2A1) | (0<<COM2A0) | (0<<COM2B1) | (0<<COM2B0) | (0<<WGM21) | (0<<WGM20);
+;PCODE: $00000421 VOL: 0
+;PCODE: $00000422 VOL: 0
+; 0000 0149 TCCR2B=(0<<WGM22) | (0<<CS22) | (0<<CS21) | (0<<CS20);
+;PCODE: $00000423 VOL: 0
+;PCODE: $00000424 VOL: 0
+; 0000 014A TCNT2=0x00;
+;PCODE: $00000425 VOL: 0
+;PCODE: $00000426 VOL: 0
+; 0000 014B OCR2A=0x00;
+;PCODE: $00000427 VOL: 0
+;PCODE: $00000428 VOL: 0
+; 0000 014C OCR2B=0x00;
+;PCODE: $00000429 VOL: 0
+;PCODE: $0000042A VOL: 0
+; 0000 014D 
+; 0000 014E // Timer/Counter 0 Interrupt(s) initialization
+; 0000 014F TIMSK0=(0<<OCIE0B) | (0<<OCIE0A) | (0<<TOIE0);
+;PCODE: $0000042B VOL: 0
+;PCODE: $0000042C VOL: 0
+; 0000 0150 
+; 0000 0151 // Timer/Counter 1 Interrupt(s) initialization
+; 0000 0152 TIMSK1=(0<<ICIE1) | (0<<OCIE1B) | (0<<OCIE1A) | (0<<TOIE1);
+;PCODE: $0000042D VOL: 0
+;PCODE: $0000042E VOL: 0
+; 0000 0153 
+; 0000 0154 // Timer/Counter 2 Interrupt(s) initialization
+; 0000 0155 TIMSK2=(0<<OCIE2B) | (0<<OCIE2A) | (0<<TOIE2);
+;PCODE: $0000042F VOL: 0
+;PCODE: $00000430 VOL: 0
+; 0000 0156 
+; 0000 0157 // External Interrupt(s) initialization
+; 0000 0158 // INT0: On
+; 0000 0159 // INT0 Mode: Falling Edge
+; 0000 015A // INT1: On
+; 0000 015B // INT1 Mode: Falling Edge
+; 0000 015C // Interrupt on any change on pins PCINT0-7: Off
+; 0000 015D // Interrupt on any change on pins PCINT8-14: Off
+; 0000 015E // Interrupt on any change on pins PCINT16-23: Off
+; 0000 015F EICRA=(1<<ISC11) | (0<<ISC10) | (1<<ISC01) | (0<<ISC00);
+;PCODE: $00000431 VOL: 0
+;PCODE: $00000432 VOL: 0
+; 0000 0160 EIMSK=(1<<INT1) | (1<<INT0);
+;PCODE: $00000433 VOL: 0
+;PCODE: $00000434 VOL: 0
+; 0000 0161 EIFR=(1<<INTF1) | (1<<INTF0);
+;PCODE: $00000435 VOL: 0
+;PCODE: $00000436 VOL: 0
+; 0000 0162 PCICR=(0<<PCIE2) | (0<<PCIE1) | (0<<PCIE0);
+;PCODE: $00000437 VOL: 0
+;PCODE: $00000438 VOL: 0
+; 0000 0163 
+; 0000 0164 // USART initialization
+; 0000 0165 // USART disabled
+; 0000 0166 UCSR0B=(0<<RXCIE0) | (0<<TXCIE0) | (0<<UDRIE0) | (0<<RXEN0) | (0<<TXEN0) | (0<<UCSZ02) | (0<<RXB80) | (0<<TXB80);
+;PCODE: $00000439 VOL: 0
+;PCODE: $0000043A VOL: 0
+; 0000 0167 
+; 0000 0168 // Analog Comparator initialization
+; 0000 0169 // Analog Comparator: Off
+; 0000 016A // The Analog Comparator's positive input is
+; 0000 016B // connected to the AIN0 pin
+; 0000 016C // The Analog Comparator's negative input is
+; 0000 016D // connected to the AIN1 pin
+; 0000 016E ACSR=(1<<ACD) | (0<<ACBG) | (0<<ACO) | (0<<ACI) | (0<<ACIE) | (0<<ACIC) | (0<<ACIS1) | (0<<ACIS0);
+;PCODE: $0000043B VOL: 0
+;PCODE: $0000043C VOL: 0
+; 0000 016F // Digital input buffer on AIN0: On
+; 0000 0170 // Digital input buffer on AIN1: On
+; 0000 0171 DIDR1=(0<<AIN0D) | (0<<AIN1D);
+;PCODE: $0000043D VOL: 0
+;PCODE: $0000043E VOL: 0
+; 0000 0172 
+; 0000 0173 // ADC initialization
+; 0000 0174 // ADC Clock frequency: 125.000 kHz
+; 0000 0175 // ADC Voltage Reference: AREF pin
+; 0000 0176 // ADC Auto Trigger Source: ADC Stopped
+; 0000 0177 // Digital input buffers on ADC0: Off, ADC1: Off, ADC2: Off, ADC3: Off
+; 0000 0178 // ADC4: On, ADC5: On
+; 0000 0179 DIDR0=(0<<ADC5D) | (0<<ADC4D) | (1<<ADC3D) | (1<<ADC2D) | (1<<ADC1D) | (1<<ADC0D);
+;PCODE: $0000043F VOL: 0
+;PCODE: $00000440 VOL: 0
+; 0000 017A ADMUX=ADC_VREF_TYPE;
+;PCODE: $00000441 VOL: 0
+;PCODE: $00000442 VOL: 0
+; 0000 017B ADCSRA=(1<<ADEN) | (0<<ADSC) | (0<<ADATE) | (0<<ADIF) | (0<<ADIE) | (1<<ADPS2) | (1<<ADPS1) | (0<<ADPS0);
+;PCODE: $00000443 VOL: 0
+;PCODE: $00000444 VOL: 0
+; 0000 017C ADCSRB=(0<<ADTS2) | (0<<ADTS1) | (0<<ADTS0);
+;PCODE: $00000445 VOL: 0
+;PCODE: $00000446 VOL: 0
+; 0000 017D 
+; 0000 017E // SPI initialization
+; 0000 017F // SPI disabled
+; 0000 0180 SPCR=(0<<SPIE) | (0<<SPE) | (0<<DORD) | (0<<MSTR) | (0<<CPOL) | (0<<CPHA) | (0<<SPR1) | (0<<SPR0);
+;PCODE: $00000447 VOL: 0
+;PCODE: $00000448 VOL: 0
+; 0000 0181 
+; 0000 0182 // TWI initialization
+; 0000 0183 // Mode: TWI Master
+; 0000 0184 // Bit Rate: 100 kHz
+; 0000 0185 twi_master_init(100);
+;PCODE: $00000449 VOL: 0
+;PCODE: $0000044A VOL: 0
+;PCODE: $0000044B VOL: 0
+; 0000 0186 
+; 0000 0187 // Global enable interrupts
+; 0000 0188 #asm("sei")
+;PCODE: $0000044C VOL: 0
+	sei
+;PCODE: $0000044D VOL: 0
+; 0000 0189 }
+;PCODE: $0000044E VOL: 0
+;PCODE: $0000044F VOL: 0
+;
+;
+;
