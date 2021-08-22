@@ -1,10 +1,4 @@
 /*******************************************************
-This program was created by the
-CodeWizardAVR V3.12 Advanced
-Automatic Program Generator
-© Copyright 1998-2014 Pavel Haiduc, HP InfoTech s.r.l.
-http://www.hpinfotech.com
-
 Project : BBPSU_MCU
 Version : 1.2
 Date    : 02/08/2021
@@ -13,8 +7,7 @@ Company : Nómadas Electrónicos
 Comments: 
 Monitoreo de Corriente y Voltaje de fuente de Alimentacion 
 Con Respaldo de Bateria para dispositivos
-como: Ruteadores, Modems, etc...
-
+como: Ruteadores, Modems, etc...    
 
 Chip type               : ATmega328
 Program type            : Application
@@ -31,8 +24,17 @@ Data Stack size         : 512
 #include "lcd_i2c.h"
 
 
-// Declare your global variables here
+// Definiciones y variables globales
 
+//#define DEBUG_DISPLAY
+
+#ifdef DEBUG_DISPLAY
+#define NUM_ESTADOS_DESP 6
+#else
+#define NUM_ESTADOS_DESP 5
+#endif
+
+//**Definicion de Pines
 //Salidas de LED
 #define LED_VERDE PORTB.7
 #define LED_ROJO  PORTB.6
@@ -42,28 +44,42 @@ Data Stack size         : 512
 #define B_1       PIND.2
 #define B_2       PIND.3
 
-uint8_t boton_display, boton2;
+//Banderas de botones
+uint8_t g_boton_display, g_boton_on_off;
+//Buffer de salida a LCD 16x2
+uint8_t g_buffer_lcd[20];
 
-uint8_t buffer_lcd[20];
-
-
+//variables de calculo
 float g_pre_cent, g_pre_csal, g_pre_vbat, g_pre_vsal, g_pre_vent;
 float g_cent, g_csal, g_vbat, g_vsal, g_vent, g_pent, g_psal, g_eff;
 
-unsigned char desplegar_estado;
+//bandera de desplegado de estado en lcd
+unsigned char g_desplegar_estado;
+//bandera de backlight de lcd (empieza prendida de "fábrica")
+eeprom unsigned char g_lcd_backlight = 1;
 
 
 // External Interrupt 0 service routine
 interrupt [EXT_INT0] void ext_int0_isr(void)
 {  
+ unsigned long int lcd_led_timer = 0;
  delay_ms(50); //debounce
- while(B_1 == 0);
+ while(B_1 == 0)
+ {
+  delay_ms(10);
+  lcd_led_timer += 10;      
+  //Si se presiona mas de 2 segundos prende/apaga el backlight de la lcd
+  if( lcd_led_timer >= 2000 )
+  {     
+   g_lcd_backlight = !g_lcd_backlight;
+   break;
+  } 
+ }
  delay_ms(50);
-   
- boton_display = 1;
-      
- //desplegar = (++desplegar)%6;
- //delay_ms(50);
+                     
+ // se presiono el boton 1 (estado en display)
+ g_boton_display = 1;  
+
 }
 
 // External Interrupt 1 service routine
@@ -73,13 +89,13 @@ interrupt [EXT_INT1] void ext_int1_isr(void)
  delay_ms(50); //debounce
  while(B_2 == 0);
  delay_ms(50);  
- 
- boton_on_off = 1;
- 
- //SEPIC_EN = !(SEPIC_EN);
- //LED_ROJO =  SEPIC_EN;
- //delay_ms(50);
+       
+ //se presiono el boton 2  (on/off de voltaje de salida)
+ g_boton_on_off = 1;
 }
+
+
+
 
 //Canales del ADC
 #define ADC_CENT  0
@@ -87,8 +103,6 @@ interrupt [EXT_INT1] void ext_int1_isr(void)
 #define ADC_VBAT  2
 #define ADC_VSAL  3
 #define ADC_VENT  6
-
-
 
 // Voltage Reference: AVCC pin
 #define ADC_VREF_TYPE ((0<<REFS1) | (1<<REFS0) | (0<<ADLAR))
@@ -160,7 +174,14 @@ hw_init();
       
 LED_ROJO =  SEPIC_EN;
 LCD_I2C_begin(0);
-LCD_I2C_backlight();
+if(g_lcd_backlight)
+{
+ LCD_I2C_Backlight();
+}
+else
+{
+ LCD_I2C_noBacklight();
+}
 LCD_I2C_setCursor(0, 0);
 LCD_I2C_puts("Nomadas");
 LCD_I2C_setCursor(0, 1);
@@ -198,63 +219,78 @@ while(1)
     
     //Se muestran los resultados
     
-    switch(desplegar_estado)
+    switch(g_desplegar_estado)
     {
         case 0:
-                sprintf(buffer_lcd, "Ient:%6.1f[mA]    ", g_cent*1000.0);
+                sprintf(g_buffer_lcd, "Ient:%6.1f[mA]    ", g_cent*1000.0);
                 LCD_I2C_setCursor(0, 0);
-                LCD_I2C_puts(buffer_lcd); 
-                sprintf(buffer_lcd, "Vent: %5.2f[V]    ", g_vent);                    
+                LCD_I2C_puts(g_buffer_lcd); 
+                sprintf(g_buffer_lcd, "Vent: %5.2f[V]    ", g_vent);                    
                 LCD_I2C_setCursor(0, 1);
-                LCD_I2C_puts(buffer_lcd);
+                LCD_I2C_puts(g_buffer_lcd);
                 break;
         case 1: 
-                sprintf(buffer_lcd, "Isal:%6.1f[mA]    ", g_csal*1000.0);
+                sprintf(g_buffer_lcd, "Isal:%6.1f[mA]    ", g_csal*1000.0);
                 LCD_I2C_setCursor(0, 0);
-                LCD_I2C_puts(buffer_lcd); 
-                sprintf(buffer_lcd, "Vsal: %5.2f[V]    ", g_vsal);                    
+                LCD_I2C_puts(g_buffer_lcd); 
+                sprintf(g_buffer_lcd, "Vsal: %5.2f[V]    ", g_vsal);                    
                 LCD_I2C_setCursor(0, 1);
-                LCD_I2C_puts(buffer_lcd);  
-                break;      
-        case 2:    
-                sprintf(buffer_lcd, "Pent:%6.1f[W]    ", g_pent);
-                LCD_I2C_setCursor(0, 0);
-                LCD_I2C_puts(buffer_lcd); 
-                sprintf(buffer_lcd, "Psal:%6.1f[W]    ", g_psal);                    
-                LCD_I2C_setCursor(0, 1);
-                LCD_I2C_puts(buffer_lcd);
-                break;
-        case 3:    
-                sprintf(buffer_lcd, "Eff: %6.1f[%%]    ", g_eff);
-                LCD_I2C_setCursor(0, 0);
-                LCD_I2C_puts(buffer_lcd); 
-                sprintf(buffer_lcd, "Vbat: %5.2f[V]    ", g_vbat);                    
-                LCD_I2C_setCursor(0, 1);
-                LCD_I2C_puts(buffer_lcd);
+                LCD_I2C_puts(g_buffer_lcd);  
                 break; 
-        case 4:    
-                sprintf(buffer_lcd, "%04d %04d %04d ", (int)g_pre_cent, (int)g_pre_csal, (int)g_pre_vbat);
+        case 2:    
+                sprintf(g_buffer_lcd, "Vent: %5.2f[V]    ", g_vent);
                 LCD_I2C_setCursor(0, 0);
-                LCD_I2C_puts(buffer_lcd); 
-                sprintf(buffer_lcd, "%04d %04d         ", (int)g_pre_vent, (int)g_pre_vsal);                    
+                LCD_I2C_puts(g_buffer_lcd); 
+                sprintf(g_buffer_lcd, "Vsal: %5.2f[V]    ", g_vsal);                    
                 LCD_I2C_setCursor(0, 1);
-                LCD_I2C_puts(buffer_lcd);
+                LCD_I2C_puts(g_buffer_lcd);
+                break;     
+        case 3:    
+                sprintf(g_buffer_lcd, "Pent:%6.1f[W]    ", g_pent);
+                LCD_I2C_setCursor(0, 0);
+                LCD_I2C_puts(g_buffer_lcd); 
+                sprintf(g_buffer_lcd, "Psal:%6.1f[W]    ", g_psal);                    
+                LCD_I2C_setCursor(0, 1);
+                LCD_I2C_puts(g_buffer_lcd);
+                break;
+        case 4:    
+                sprintf(g_buffer_lcd, "Eff: %6.1f[%%]    ", g_eff);
+                LCD_I2C_setCursor(0, 0);
+                LCD_I2C_puts(g_buffer_lcd); 
+                sprintf(g_buffer_lcd, "Vbat: %5.2f[V]    ", g_vbat);                    
+                LCD_I2C_setCursor(0, 1);
+                LCD_I2C_puts(g_buffer_lcd);
+                break; 
+        case 5: // Solo debe aparece cuando esta en modo DEBUG   
+                sprintf(g_buffer_lcd, "%04d %04d %04d  ", (int)g_pre_cent, (int)g_pre_csal, (int)g_pre_vbat);
+                LCD_I2C_setCursor(0, 0);
+                LCD_I2C_puts(g_buffer_lcd); 
+                sprintf(g_buffer_lcd, "%04d %04d        ", (int)g_pre_vent, (int)g_pre_vsal);                    
+                LCD_I2C_setCursor(0, 1);
+                LCD_I2C_puts(g_buffer_lcd);
                 break;
         
     }
       
-    if(boton_display)
-    {
-      desplegar_estado = (++desplegar_estado)%5 ;
-      boton_display = 0;
+    if(g_boton_display)
+    {          
+      g_desplegar_estado = (++g_desplegar_estado)% NUM_ESTADOS_DESP ;        
+      g_boton_display = 0;
     }
-    if(boton_on_off)
+    if(g_boton_on_off)
     {
       SEPIC_EN = !(SEPIC_EN);
       LED_ROJO =  SEPIC_EN; 
-      boton_on_off = 0;
+      g_boton_on_off = 0;
+    } 
+    if(g_lcd_backlight)
+    {
+     LCD_I2C_Backlight();
     }
-    //delay_ms(100);
+    else
+    {
+     LCD_I2C_noBacklight();
+    }
 
 
 }

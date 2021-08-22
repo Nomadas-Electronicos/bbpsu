@@ -1,4 +1,4 @@
-VERSION:3 SOURCE_TIMESTAMP:52338391
+VERSION:3 SOURCE_TIMESTAMP:53159E12
 NODE:I LEVEL:0 LINE:1 "C:\cvavr\inc\mega328.h"
 NODE:I LEVEL:0 LINE:2 "C:\cvavr\inc\delay.h"
 NODE:I LEVEL:0 LINE:3 "C:\cvavr\inc\twi.h"
@@ -16,7 +16,7 @@ NODE:V LEVEL:0 LINE:22 "_displayState -> R3"
 NODE:F LEVEL:0 LINE:24 "GetLowData(struct OutputState in)"
 NODE:F LEVEL:0 LINE:34 "GetHighData(struct OutputState in)"
 NODE:F LEVEL:0 LINE:72 "LCD_I2C_begin(_Bool beginWire)"
-NODE:F LEVEL:0 LINE:83 "LCD_I2C_backlight(void)"
+NODE:F LEVEL:0 LINE:83 "LCD_I2C_Backlight(void)"
 NODE:F LEVEL:0 LINE:89 "LCD_I2C_noBacklight(void)"
 NODE:F LEVEL:0 LINE:95 "LCD_I2C_clear(void)"
 NODE:F LEVEL:0 LINE:104 "LCD_I2C_home(void)"

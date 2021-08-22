@@ -80,7 +80,7 @@ void LCD_I2C_begin(bool beginWire)
     LCD_I2C_InitializeLCD();
 }
 
-void LCD_I2C_Backlight()
+void LCD_I2C_backlight()
 {
     _output.Led = 1;
     LCD_I2C_I2C_Write(0b00000000 | _output.Led << 3); // Led pin is independent from LCD data and control lines.
